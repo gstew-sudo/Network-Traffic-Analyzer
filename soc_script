@@ -1,0 +1,80 @@
+# soc_network_analyzer.py
+import pyshark
+from collections import Counter
+import csv
+
+
+# Configuration
+
+PCAP_FILE = 'sample.pcap'  # Replace with your PCAP file
+SUSPICIOUS_CONN_THRESHOLD = 50  # Flag IPs with more than this many packets
+REPORT_FILE = 'network_analysis_report.csv'
+
+
+# Load Packets
+
+print(f"[+] Analyzing network traffic from: {PCAP_FILE}")
+cap = pyshark.FileCapture(PCAP_FILE)
+
+src_ips = []
+dst_ips = []
+protocols = []
+
+
+# Parse Packets
+
+for pkt in cap:
+    try:
+        if 'IP' in pkt:
+            src_ips.append(pkt.ip.src)
+            dst_ips.append(pkt.ip.dst)
+        protocols.append(pkt.highest_layer)
+    except AttributeError:
+        continue
+
+
+# Summarize Traffic
+
+src_count = Counter(src_ips)
+dst_count = Counter(dst_ips)
+protocol_count = Counter(protocols)
+
+print("\n[+] Top 5 Source IPs:")
+for ip, count in src_count.most_common(5):
+    print(f"{ip}: {count} packets")
+
+print("\n[+] Top 5 Destination IPs:")
+for ip, count in dst_count.most_common(5):
+    print(f"{ip}: {count} packets")
+
+print("\n[+] Protocol Usage:")
+for proto, count in protocol_count.most_common():
+    print(f"{proto}: {count} packets")
+
+
+# Detect Suspicious Activity
+
+suspicious_ips = {ip: count for ip, count in src_count.items() if count > SUSPICIOUS_CONN_THRESHOLD}
+if suspicious_ips:
+    print("\n[!] Suspicious IPs Detected:")
+    for ip, count in suspicious_ips.items():
+        print(f"{ip} --> {count} packets (possible scanning/attack)")
+else:
+    print("\n[+] No suspicious IPs detected.")
+
+
+# Generate CSV Report
+
+with open(REPORT_FILE, 'w', newline='') as csvfile:
+    fieldnames = ['Type', 'Value', 'Count']
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+    
+    for ip, count in src_count.items():
+        writer.writerow({'Type': 'Source IP', 'Value': ip, 'Count': count})
+    for ip, count in dst_count.items():
+        writer.writerow({'Type': 'Destination IP', 'Value': ip, 'Count': count})
+    for proto, count in protocol_count.items():
+        writer.writerow({'Type': 'Protocol', 'Value': proto, 'Count': count})
+
+print(f"\n[+] Analysis complete! Report saved as {REPORT_FILE}")
